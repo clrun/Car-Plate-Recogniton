@@ -1,0 +1,12 @@
+# 车型数据集配置文件（BITVehicle 6类）
+path: D:/Car-Plate-Recogniton/data/vehicle  # 数据集根路径（用/或\\）
+train: images/train  # 训练集图片路径
+val: images/val      # 验证集图片路径
+
+# 类别名称（顺序必须和标注文件的class_id一致！）
+names:
+  0: car         # 轿车
+  1: bus         # 巴士
+  2: van         # 面包车
+  3: truck       # 卡车
+

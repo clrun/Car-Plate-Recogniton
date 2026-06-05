@@ -1,0 +1,8 @@
+# 注意：这里的路径直接写，不要加 r、不要加引号
+path: D:/Car-Plate-Recogniton/data
+train: images/train
+val: images/val
+
+# 类别配置
+nc: 1
+names: ["license_plate"]

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>车辆&车牌识别系统</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#f5f7fa;font-family:Microsoft YaHei;padding:40px}
+        .container{max-width:900px;margin:0 auto;background:#fff;padding:30px;border-radius:12px;box-shadow:0 2px 12px #eee}
+        h1{text-align:center;color:#333;margin-bottom:30px}
+        .upload-box{border:2px dashed #409eff;padding:40px;text-align:center;margin-bottom:30px;border-radius:8px}
+        input[type="file"]{margin-bottom:15px}
+        button{background:#409eff;color:#fff;border:none;padding:10px 26px;border-radius:6px;cursor:pointer;font-size:16px}
+        button:hover{background:#337ecc}
+        #result{margin-top:30px;text-align:center}
+        #result img{max-width:100%;border:1px solid #eee;border-radius:8px}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>车型+车牌智能识别平台</h1>
+    <div class="upload-box">
+        <form id="formData" enctype="multipart/form-data">
+            <input type="file" id="imgFile" accept="image/*" name="file">
+            <br>
+            <button type="submit">开始识别</button>
+        </form>
+    </div>
+    <div id="result"></div>
+</div>
+
+<script>
+    const form = document.getElementById('formData');
+    form.addEventListener('submit',async (e)=>{
+        e.preventDefault();
+        let file = document.getElementById('imgFile').files[0];
+        if(!file){
+            alert("请选择图片");
+            return;
+        }
+        let fd = new FormData();
+        fd.append('file',file);
+        // 发送请求
+        let res = await fetch("/predict",{
+            method:"POST",
+            body:fd
+        })
+        let blob = await res.blob();
+        let imgUrl = URL.createObjectURL(blob);
+        document.getElementById("result").innerHTML = `<img src="${imgUrl}">`
+    })
+</script>
+</body>
+</html>
