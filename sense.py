@@ -1,0 +1,204 @@
+import cv2
+import numpy as np
+from ultralytics import YOLO
+from typing import List, Dict
+
+# ===================== 全局配置 =====================
+CONFIG = {
+    # 车型检测模型（默认官方YOLOv8n，自动下载；细粒度车型请替换为自定义权重）
+    "vehicle_model": "yolov8n.pt",
+    # 车牌检测模型（需自行准备YOLOv8格式的车牌检测权重）
+    "plate_model": "plate_detect.pt",
+    # 置信度阈值，过滤低置信度结果
+    "conf_threshold": 0.5,
+    # NMS非极大值抑制阈值，去除重复框
+    "iou_threshold": 0.45,
+    # 车型类别映射（COCO预训练模型对应ID，自定义模型请同步修改）
+    "vehicle_cls": {
+        2: "小汽车",
+        3: "摩托车",
+        5: "公交车",
+        7: "货车"
+    },
+    # 车牌颜色类别映射（根据训练模型调整）
+    "plate_cls": {
+        0: "蓝牌",
+        1: "绿牌",
+        2: "黄牌"
+    }
+}
+
+# ===================== 模型加载（全局仅加载一次） =====================
+vehicle_detector = YOLO(CONFIG["vehicle_model"])
+plate_detector = YOLO(CONFIG["plate_model"])
+
+def detect_vehicles(img: np.ndarray) -> List[Dict]:
+    """
+    车型检测与分类
+    :param img: OpenCV读取的BGR格式图像
+    :return: 车辆检测结果列表
+    """
+    results = vehicle_detector.predict(
+        img,
+        conf=CONFIG["conf_threshold"],
+        iou=CONFIG["iou_threshold"],
+        verbose=False  # 关闭控制台日志
+    )
+
+    detections = []
+    for res in results:
+        for box in res.boxes:
+            cls_id = int(box.cls[0].item())
+            # 只保留车辆类别，过滤其他物体
+            if cls_id not in CONFIG["vehicle_cls"]:
+                continue
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            detections.append({
+                "category": "vehicle",
+                "name": CONFIG["vehicle_cls"][cls_id],
+                "confidence": round(float(box.conf[0].item()), 4),
+                "bbox": [x1, y1, x2, y2]
+            })
+    return detections
+
+def detect_plates(img: np.ndarray) -> List[Dict]:
+    """
+    车牌区域检测
+    :param img: OpenCV读取的BGR格式图像
+    :return: 车牌检测结果列表
+    """
+    results = plate_detector.predict(
+        img,
+        conf=CONFIG["conf_threshold"],
+        iou=CONFIG["iou_threshold"],
+        verbose=False
+    )
+
+    detections = []
+    for res in results:
+        for box in res.boxes:
+            cls_id = int(box.cls[0].item())
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            detections.append({
+                "category": "plate",
+                "name": CONFIG["plate_cls"].get(cls_id, "车牌"),
+                "confidence": round(float(box.conf[0].item()), 4),
+                "bbox": [x1, y1, x2, y2]
+            })
+    return detections
+
+def draw_result(img: np.ndarray, vehicle_dets: List[Dict], plate_dets: List[Dict]) -> np.ndarray:
+    """
+    在图像上绘制检测框、类别与置信度
+    """
+    draw_img = img.copy()
+
+    # 绘制车辆检测框（蓝色）
+    for det in vehicle_dets:
+        x1, y1, x2, y2 = det["bbox"]
+        label = f"{det['name']} {det['confidence']:.2f}"
+        # 画矩形框
+        cv2.rectangle(draw_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        # 画标签背景
+        (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        cv2.rectangle(draw_img, (x1, y1 - text_h - 10), (x1 + text_w, y1), (255, 0, 0), -1)
+        # 画标签文字
+        cv2.putText(draw_img, label, (x1, y1 - 5), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    # 绘制车牌检测框（绿色）
+    for det in plate_dets:
+        x1, y1, x2, y2 = det["bbox"]
+        label = f"{det['name']} {det['confidence']:.2f}"
+        cv2.rectangle(draw_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        (text_w, text_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        cv2.rectangle(draw_img, (x1, y1 - text_h - 10), (x1 + text_w, y1), (0, 255, 0), -1)
+        cv2.putText(draw_img, label, (x1, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+    return draw_img
+
+# ===================== 1. 单张图片检测 =====================
+def run_image(img_path: str, save_path: str = "result.jpg"):
+    img = cv2.imread(img_path)
+    if img is None:
+        print(f"错误：无法读取图片 {img_path}")
+        return
+
+    # 执行检测
+    vehicle_res = detect_vehicles(img)
+    plate_res = detect_plates(img)
+
+    # 控制台输出结果
+    print(f"\n===== 检测结果 =====")
+    print(f"检测到车辆：{len(vehicle_res)} 辆")
+    for v in vehicle_res:
+        print(f"  类型：{v['name']}，置信度：{v['confidence']}，坐标：{v['bbox']}")
+    print(f"检测到车牌：{len(plate_res)} 个")
+    for p in plate_res:
+        print(f"  类型：{p['name']}，置信度：{p['confidence']}，坐标：{p['bbox']}")
+
+    # 绘制并保存
+    result_img = draw_result(img, vehicle_res, plate_res)
+    cv2.imwrite(save_path, result_img)
+    print(f"\n结果图已保存至：{save_path}")
+
+# ===================== 2. 视频/摄像头实时侦测 =====================
+def run_video(source=0, save_path: str = None):
+    """
+    :param source: 0=默认摄像头，也可传入视频文件路径
+    :param save_path: 可选，保存检测结果视频
+    """
+    cap = cv2.VideoCapture(source)
+    if not cap.isOpened():
+        print("错误：无法打开视频源")
+        return
+
+    # 获取视频参数
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # 视频写入器
+    writer = None
+    if save_path:
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        writer = cv2.VideoWriter(save_path, fourcc, fps, (width, height))
+
+    print("实时侦测已启动，按 q 键退出...")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # 逐帧检测
+        vehicle_res = detect_vehicles(frame)
+        plate_res = detect_plates(frame)
+        frame_draw = draw_result(frame, vehicle_res, plate_res)
+
+        # 显示画面
+        cv2.imshow("车型&车牌实时侦测", frame_draw)
+
+        # 保存视频
+        if writer:
+            writer.write(frame_draw)
+
+        # 按q退出
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    if writer:
+        writer.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    # ---------- 按需启用对应功能 ----------
+    # 1. 单张图片检测
+    # run_image("test_car.jpg")
+
+    # 2. 摄像头实时侦测
+    run_video(0)
+
+    # 3. 视频文件检测并保存
+    # run_video("traffic_video.mp4", "result_video.mp4")

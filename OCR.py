@@ -1,0 +1,26 @@
+import easyocr
+
+# 初始化OCR（支持简体中文+英文，首次运行自动下载模型）
+ocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
+
+def recognize_plate_number(img: np.ndarray, bbox: List[int]) -> str:
+    """
+    裁剪车牌区域并识别字符
+    :param img: 原图
+    :param bbox: 车牌检测框 [x1, y1, x2, y2]
+    :return: 车牌号码字符串
+    """
+    x1, y1, x2, y2 = bbox
+    # 裁剪车牌区域
+    plate_roi = img[y1:y2, x1:x2]
+    # OCR识别
+    result = ocr_reader.readtext(plate_roi, detail=0)
+    
+    if result:
+        # 过滤无效字符，保留汉字、字母、数字
+        plate_str = ''.join([
+            c for c in result[0] 
+            if c.isalnum() or '\u4e00' <= c <= '\u9fff'
+        ])
+        return plate_str.upper()
+    return ""
